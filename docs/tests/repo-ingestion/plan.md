@@ -1,8 +1,8 @@
 ---
 title: 저장소 수집·청킹·임베딩·HTML 조회 테스트 계획서
-status: draft
+status: design-reference
 phase: design
-version: "0.3"
+version: "0.5"
 model_id: intfloat/multilingual-e5-small
 embedding_backend: transformers
 date: 2026-10-10
@@ -20,8 +20,11 @@ aliases:
 
 [[docs/tests/index|테스트 설계 목록]] · [[git-rag-design|전체 설계]]
 
+> [!note] 최종 구현 기준과 사용법
+> 이 문서는 설계 배경과 검증 계획입니다. 실제 기본값·파일명·스키마는 [[docs/tests/repo-ingestion/final-design|최종 설계]]를 기준으로 하고, 실행 인자는 [[docs/tests/repo-ingestion/usage|명령어와 사용 방법]]에서 확인합니다.
+
 > [!important] 현재 작업 범위
-> 이 문서는 구현 전 설계 계획서입니다. 지금은 실행 코드 작성, 패키지 설치, 저장소 수집, 모델 가중치 다운로드를 진행하지 않습니다. 아래 코드 경로와 결과 파일은 앞으로 만들 구조를 제안한 것입니다.
+> 이 문서는 구현 전에 작성한 설계 배경입니다. 현재 실행 코드는 `tests/repo_ingestion/`에 구현했습니다. 확정된 구조는 [[docs/tests/repo-ingestion/final-design|최종 설계]], 실행 방법은 [[docs/tests/repo-ingestion/usage|사용 방법]], 확인 결과는 [[docs/tests/repo-ingestion/validation|검증 기록]]을 기준으로 합니다.
 
 ## 1. 테스트 목표
 
@@ -105,7 +108,7 @@ GitHub REST API를 HTTPS로 호출합니다. 현재의 [파일 하나 조회 테
 2. 기본 브랜치 또는 사용자가 준 ref를 한 번만 조회해 commit SHA를 확정합니다.
 3. 해당 commit의 Git tree에서 폴더·파일 경로를 수집합니다.
 4. 대상 폴더, 확장자, 제외 규칙과 크기 제한을 적용합니다.
-5. 모든 원문 조회에 같은 commit SHA를 사용합니다.
+5. 확정한 commit의 tree에 포함된 blob SHA로 Git Blobs API를 조회합니다.
 6. 파일별 성공·제외·실패 상태와 이유를 남깁니다.
 
 Trees API의 재귀 응답이 `truncated`이면 목록 수집을 완료했다고 처리하지 않습니다. 하위 tree를 별도로 조회해 전체 목록을 확보하거나, 목록 수집이 불완전하다는 상태를 명시합니다.
@@ -160,7 +163,7 @@ Notebook은 바이너리가 아닙니다. 코드·Markdown 셀을 추출하는 �
 
 청크 토큰 수는 선정한 `intfloat/multilingual-e5-small`의 tokenizer로 확인합니다. 문서 prefix인 `passage: `와 특수 토큰을 포함한 최종 입력을 최대 512 token 안으로 분할합니다. 모델이 입력을 조용히 잘라 버린 상태로 원문 전체를 처리했다고 기록하지 않습니다. [모델 사용 규칙](https://huggingface.co/intfloat/multilingual-e5-small/raw/main/README.md)
 
-청크 크기와 겹침은 설정으로 기록합니다. 첫 검증은 겹침 없이 원문 복원을 확인하고, 그다음 겹침을 적용해 HTML에서 중복 구간을 확인합니다. 목표 청크 크기와 겹침은 아직 미정이며, prefix·특수 토큰을 포함한 모델 한도와 구분합니다.
+청크 크기와 겹침은 설정으로 기록합니다. 이번 테스트는 최종 입력 최대 512 token, 겹침 0으로 확정합니다. 줄 경계를 우선하고 긴 한 줄은 문자 구간으로 나눈 뒤 입력 길이를 다시 확인합니다. 겹침 실험은 이후 단계입니다.
 
 ### 문서마다 청크 수가 다른 이유
 
@@ -192,7 +195,7 @@ Tokenizer는 token IDs를 만들고, encoder가 임베딩 벡터를 만듭니다
 
 | 항목 | 설계 결정 |
 | --- | --- |
-| 로딩을 담당할 코드 | `tests/repo_ingestion/embed.py` |
+| 로딩을 담당할 코드 | `tests/repo_ingestion/embedder.py` |
 | tokenizer 로딩 | `AutoTokenizer.from_pretrained()` |
 | encoder 로딩 | `AutoModel.from_pretrained()` |
 | 모델 ID | `intfloat/multilingual-e5-small` |
@@ -217,15 +220,15 @@ passage: 청크 내용
 → NumPy float32로 저장
 ```
 
-### embed.py에서 담당할 함수 제안
+### embedder.py에서 담당할 함수 제안
 
 | 함수 | 역할 |
 | --- | --- |
-| `load_tokenizer()` | 같은 모델·revision의 tokenizer를 준비하고 chunk.py에서도 사용 |
+| `load_tokenizer()` | 같은 모델·revision의 tokenizer를 준비하고 chunker.py에서도 사용 |
 | `load_encoder()` | encoder를 실행당 한 번 로딩하고 장치로 이동, 평가 모드 설정 |
 | `encode_documents()` | prefix 적용, 길이 검사, 배치 추론, pooling·정규화, NumPy 변환 |
 
-`run.py`가 청킹 전에 tokenizer를 준비해 `chunk.py`에 전달합니다. 임베딩 단계에서는 같은 tokenizer를 재사용합니다. 파일이나 청크마다 모델을 다시 로딩하지 않습니다. 추론은 `model.eval()`과 `torch.inference_mode()`로 수행하도록 계획합니다.
+`run.py`가 청킹 전에 tokenizer를 준비해 `chunker.py`에 전달합니다. 임베딩 단계에서는 같은 tokenizer를 재사용합니다. 파일이나 청크마다 모델을 다시 로딩하지 않습니다. 추론은 `model.eval()`과 `torch.inference_mode()`로 수행하도록 계획합니다.
 
 ### SentenceTransformer와의 차이와 모델 검증
 
@@ -243,7 +246,7 @@ passage: 청크 내용
 - 현재 PC에서 단일 배치로 동작하고 처리 시간·메모리를 측정할 수 있는지.
 - 사용 조건과 다운로드 크기를 확인할 수 있는지.
 
-모델 ID와 로딩 라이브러리는 선정했습니다. 정확한 revision과 배치 크기는 구현 전에 정합니다. 자산 다운로드 시간과 실제 임베딩 처리 시간은 구분해 기록합니다. 지금은 설계 문서만 갱신하며 모델 자산을 다운로드하지 않습니다.
+모델 ID와 로딩 라이브러리는 선정했습니다. revision은 실행 시 모델 metadata의 실제 SHA로 확정하고 tokenizer·encoder에 동일하게 사용합니다. 기본 배치 크기는 8입니다. 자산 다운로드 시간과 실제 임베딩 처리 시간은 구분해 기록합니다. 지금은 설계 문서만 갱신하며 모델 자산을 다운로드하지 않습니다.
 
 ### 현재 확인된 실행 환경
 
@@ -283,19 +286,23 @@ git-rag/
 │  └─ tests/
 │     ├─ index.md
 │     └─ repo-ingestion/
-│        └─ plan.md
+│        ├─ plan.md
+│        ├─ final-design.md
+│        └─ usage.md
 └─ tests/
    ├─ git_fetch/                  # 기존 파일 하나 조회 실험
    └─ repo_ingestion/             # 앞으로 만들 실험 코드
       ├─ run.py
-      ├─ env.py
-      ├─ fetch.py
-      ├─ chunk.py
-      ├─ embed.py
+      ├─ config.py
+      ├─ github_client.py
+      ├─ collector.py
+      ├─ chunker.py
+      ├─ embedder.py
       ├─ storage.py
       ├─ report.py
       ├─ test_ingestion.py
-      ├─ README.md
+      ├─ requirements.txt
+      ├─ .model-cache/           # tokenizer/model 캐시, Git 추적 제외
       └─ output/                 # 앞으로 생성할 결과, Git 추적 제외
          ├─ index.html           # 모든 repo/run의 목록·원문·청크를 보는 단일 HTML
          └─ owner--repo/
@@ -312,10 +319,11 @@ git-rag/
 | 모듈                  | 역할                          | 받는 것 → 돌려주는 것             |
 | ------------------- | --------------------------- | ------------------------- |
 | `run.py`            | 단계 실행과 상태·시간 기록             | 사용자 입력 → 실행 결과 경로         |
-| `env.py`            | `load_env()`, `.env`와 토큰 로딩 | 실행 환경 → 인증 설정             |
-| `fetch.py`          | commit 확정, tree 조회, 원문 수집   | repo/ref/scope → 파일 목록·문서 |
-| `chunk.py`          | 원문 위치와 모델 토큰 한도를 보존한 분할 | 문서·공유 tokenizer·청킹 설정 → 청크 |
-| `embed.py`          | AutoTokenizer·AutoModel 로딩, pooling·정규화 | 청크·모델 설정 → 벡터·생성 정보 |
+| `config.py`         | `load_env()`, 인증·기본값·입력 검증 | 실행 환경·인자 → 설정 |
+| `github_client.py`  | commit·tree·blob API 조회와 응답 검증 | repo/ref → Git metadata·bytes |
+| `collector.py`      | 대상 필터·본문 검증·원문 수집 | 파일 metadata·bytes → 목록 상태·문서 |
+| `chunker.py`        | 원문 위치와 모델 토큰 한도를 보존한 분할 | 문서·공유 tokenizer·청킹 설정 → 청크 |
+| `embedder.py`       | AutoTokenizer·AutoModel 로딩, pooling·정규화 | 청크·모델 설정 → 벡터·생성 정보 |
 | `storage.py`        | 로컬 파일 저장·재로드·대응 검증          | 데이터 → 저장 파일과 검증 결과        |
 | `report.py`         | 목록·원문·청크 HTML 생성            | 저장 결과 → 조회 가능한 HTML       |
 | `test_ingestion.py` | 입력·위치·관계·HTML 검증            | 작은 고정 예제 → 검사 결과          |
@@ -514,16 +522,16 @@ HTML에는 원문·청크와 벡터 상태를 포함하고, 벡터 전체 배열
 
 Obsidian에서 계획서의 표·내부 링크·Mermaid를 확인합니다. 구현 후 브라우저에서는 실제 폴더 탐색, 파일 열기, 청크 선택과 겹침 표시를 확인합니다.
 
-## 13. 구현 전에 결정할 항목
+## 13. 구현 기준 결정 현황
 
-- [ ] 첫 실제 GitHub 저장소 URL, ref와 대상 폴더.
-- [ ] 대상 확장자와 CSV·Notebook 처리 범위.
-- [ ] 최대 파일 크기와 제외 규칙.
+- [x] 실제 repo/ref/폴더는 CLI 입력. 첫 작은 공개 repo 예제는 사용법에 명시.
+- [x] 기본 `.py,.md,.txt`, README·LICENSE. CSV는 확장자 추가 시 일반 텍스트, Notebook 셀 파서는 제외.
+- [x] 파일당 기본 1,000,000 bytes와 경로·종류·본문 제외 규칙.
 - [x] 1차 임베딩 모델: `intfloat/multilingual-e5-small`.
 - [x] 로딩 라이브러리: `transformers`의 `AutoTokenizer`·`AutoModel`과 PyTorch.
-- [ ] 모델과 tokenizer에 함께 사용할 고정 revision, 배치 크기.
-- [ ] 청크 token 예산, 겹침과 모델 입력 한도 처리.
-- [ ] 실행 결과에 보존할 처리 시간·모델 설정 항목.
+- [x] 실행 시 동일한 model revision SHA 확정. 배치 기본 8.
+- [x] prefix·special tokens 포함 최대 512 token, 겹침 0.
+- [x] 처리 시간·모델 설정·저장 스키마는 최종 설계에 명시.
 
 > [!tip] 다음 작업
 > 이 계획을 기준으로 먼저 환경 로딩·파일 목록·원문 수집·청킹과 1차 HTML을 만들고 확인합니다. 그다음 선택한 encoder로 벡터를 생성하고, 저장·재로드와 HTML의 벡터 상태를 검증합니다.
@@ -542,3 +550,5 @@ Obsidian에서 계획서의 표·내부 링크·Mermaid를 확인합니다. 구�
 | 2026-10-10 | 0.1 | URL 입력, 환경 변수, 파일 저장, 청킹·임베딩, HTML 조회와 논리 ERD를 설계. 구현 전 초안. |
 | 2026-10-10 | 0.2 | E5 small과 AutoTokenizer·AutoModel 선정. tokenizer 준비 시점, pooling·정규화와 입력 한도를 명시. 구현·다운로드는 진행하지 않음. |
 | 2026-10-10 | 0.3 | 모든 repo/run을 단일 HTML로 조회하도록 변경. JSONL·NPY 저장 단위, 파일 제외 이유와 청크 수·최종 입력 512 token 기준을 명시. |
+| 2026-10-10 | 0.4 | 최종 설계·스키마 및 CLI help·사용법 문서를 추가하고 기본값·모듈명을 연결. 구현 전 상태 유지. |
+| 2026-10-10 | 0.5 | 구현 코드·실제 GitHub 수집·E5 CUDA 추론·저장 검증 기록을 연결. 이 문서는 설계 배경으로 보존. |

@@ -10,7 +10,7 @@ tags:
   - architecture
   - draft
 ---
-
+	
 # Git RAG — 수업 저장소 학습 튜터
 
 > [!warning] 검토 중인 초기 설계
@@ -191,3 +191,5 @@ CPU 서버안에서도 미리 만든 문서 색인과 동일한 모델·버전�
 
 - [[docs/tests/index|테스트 설계 목록]]
 - [[docs/tests/repo-ingestion/plan|저장소 수집·청킹·임베딩·HTML 조회 테스트 계획서]] — 로컬 파일 저장과 결과 탐색을 검증하기 위한 구현 전 초안.
+- [[docs/tests/repo-ingestion/final-design|저장소 수집 최종 설계]] — 파일 구조, 유효성 검증, 모델과 저장 스키마의 구현 기준.
+- [[docs/tests/repo-ingestion/usage|입력 명령어와 사용 방법]] — 예정된 CLI help, 인자, PowerShell 실행 예제.

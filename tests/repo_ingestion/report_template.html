@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Git RAG · Repository Explorer</title>
+<style>
+:root{color-scheme:dark;--bg:#10151e;--panel:#19212d;--line:#303e50;--text:#e8edf5;--muted:#9dadc2;--accent:#87c4ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,sans-serif}header{padding:24px 32px;border-bottom:1px solid var(--line)}h1{margin:0;font-size:25px}h2{font-size:18px;margin:0 0 12px}h3{font-size:15px}p{margin:8px 0}small,.muted{color:var(--muted)}a{color:var(--accent);overflow-wrap:anywhere}button,input,select{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px}button{cursor:pointer;text-align:left}button:hover,a:hover{color:#b8dcff}select{width:100%}label{display:block;color:var(--muted);margin-bottom:5px}.toolbar{display:grid;grid-template-columns:1fr 2fr;gap:18px;padding:20px 32px}.stats{display:flex;flex-wrap:wrap;gap:10px;margin:0 32px 18px}.stat{min-width:115px;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:10px 16px}.stat strong{display:block;font-size:23px}.layout{display:grid;grid-template-columns:minmax(270px,330px) minmax(0,1fr);gap:20px;margin:0 32px 32px}.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0}.file-list{max-height:70vh;overflow:auto}.file{border-bottom:1px solid var(--line);padding:12px 0}.file a{display:block;font-weight:600}.badge{display:inline-block;font-size:12px;border-radius:4px;padding:1px 7px;background:#2b3c50;color:var(--accent);margin:3px 6px 3px 0}.badge.failed,.badge.partial{background:#542e37;color:#ffc2c2}.badge.excluded,.badge.not_run{background:#41402c;color:#e5d9a4}.badge.embedded,.badge.completed,.badge.collected_only{background:#214c42;color:#a8e7d6}.source{white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4;font:13px/1.7 Consolas,monospace;background:var(--bg);padding:18px;border-radius:8px;max-height:550px;overflow:auto;margin:12px 0}.source mark{background:#244c70;color:inherit;border-bottom:2px solid var(--accent)}.chunk-layout{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px}.chunk-list{max-height:400px;overflow:auto}.chunk-list a{display:block;border:1px solid var(--line);border-radius:6px;padding:9px;margin-bottom:8px;text-decoration:none}.chunk-list a.active{border-color:var(--accent);background:#23374c}.metadata{overflow-wrap:anywhere;color:var(--muted);font-size:13px}.empty{padding:28px;color:var(--muted)}details{border-top:1px solid var(--line);margin-top:18px;padding-top:12px}summary{cursor:pointer}.error{color:#ffc2c2;white-space:pre-wrap;overflow-wrap:anywhere}#filter{width:100%;margin-bottom:12px}#warnings{margin:0 32px 18px}.directory{font-size:13px;color:var(--muted);padding:6px 0}#folder-list{max-height:160px;overflow:auto;margin-bottom:12px}
+@media(max-width:850px){header,.toolbar{padding:18px}.layout{grid-template-columns:1fr;margin:0 18px 18px}.stats{margin:0 18px 18px}.toolbar,.chunk-layout{grid-template-columns:1fr}.file-list{max-height:300px}#warnings{margin:0 18px 18px}}
+</style>
+</head>
+<body>
+<header><h1>Git RAG · Repository Explorer</h1><p class="muted">저장소 실행 결과 · 원문 · 청크 · 벡터 상태</p><small>로컬 저장 결과를 표시합니다. 새 실행 후 이 페이지를 새로고침하세요.</small></header>
+<div class="toolbar"><div><label for="repo">Repository</label><select id="repo"></select></div><div><label for="run">Run</label><select id="run"></select></div></div>
+<div id="warnings" class="error"></div><div id="stats" class="stats"></div>
+<main class="layout"><aside class="panel"><h2>폴더 / 파일</h2><div id="folder-list"></div><label for="filter">경로·상태·제외 이유 필터</label><input id="filter" placeholder="예: README, excluded, too_large"><div id="file-list" class="file-list"></div></aside><section class="panel" id="detail"></section></main>
+<script id="report-data" type="application/json">__REPORT_DATA__</script>
+<script>
+'use strict';
+const DATA = JSON.parse(document.getElementById('report-data').textContent);
+const $ = id => document.getElementById(id);
+const repos = [...new Set(DATA.runs.map(r => r.manifest.repo))].sort();
+let active = null;
+function node(tag, text, cls) { const e=document.createElement(tag); if(text!==undefined)e.textContent=text; if(cls)e.className=cls; return e; }
+function badge(text) { return node('span',text,'badge '+text); }
+function hash(run,doc,chunk) { const p=new URLSearchParams({run});if(doc)p.set('document',doc);if(chunk)p.set('chunk',chunk);return '#'+p.toString(); }
+function external(text,url) { const a=node('a',text); try{const u=new URL(url);if(u.protocol==='https:'&&u.hostname==='github.com'){a.href=u.href;a.target='_blank';a.rel='noopener noreferrer';}}catch{}return a; }
+function jsonDetails(title,value) { const d=node('details');d.append(node('summary',title),node('pre',JSON.stringify(value,null,2),'source'));return d; }
+function renderList() {
+ const list=$('file-list');list.replaceChildren();if(!active)return;
+ const query=$('filter').value.toLowerCase();
+ const files=active.files.filter(f=>[f.path,f.status,f.reason_code||''].join(' ').toLowerCase().includes(query));
+ for(const file of files){const row=node('div',undefined,'file');if(file.document_id){const a=node('a',file.path);a.href=hash(active.manifest.run_id,file.document_id);row.append(a);}else row.append(node('div',file.path));row.append(badge(file.status),node('small',`${file.size_bytes??'?'} bytes · ${file.chunk_count} chunks`));if(file.reason_code)row.append(node('div',file.reason_code+': '+(file.reason||''),'metadata'));list.append(row);}
+ if(!files.length)list.append(node('p','표시할 파일이 없습니다.','empty'));
+}
+function overview() {
+ const detail=$('detail');detail.replaceChildren();if(!active){detail.append(node('h2','아직 저장된 실행이 없습니다.'),node('p','run.py에 GitHub repo URL을 넣어 실행하세요.','muted'));return;}
+ const m=active.manifest;detail.append(node('h2',m.repo),badge(m.status),node('p','파일 링크를 선택하면 원문과 청크를 확인할 수 있습니다.'));
+ detail.append(node('p',`commit: ${m.commit_sha||'확정 실패'}`,'metadata'),node('p',`scope: ${m.scope_path||'repo 전체'} · ${m.mode}`,'metadata'));
+ detail.append(node('p',`모델: ${m.embedding.model_id} · revision: ${m.embedding.revision||'미확정'}`,'metadata'));
+ if(!m.inventory_complete)detail.append(node('p','전체 경로 목록을 확보하지 못한 실행입니다.','error'));
+ for(const error of m.errors||[])detail.append(node('p',`${error.stage} / ${error.code}: ${error.message}`,'error'));
+ detail.append(jsonDetails('Manifest · 설정과 실행 상태',m));
+}
+function renderDocument(docId,chunkId) {
+ const doc=active.documents.find(d=>d.document_id===docId);if(!doc){overview();return;}
+ const chunks=active.chunks.filter(c=>c.document_id===docId).sort((a,b)=>a.chunk_index-b.chunk_index);
+ const selected=chunks.find(c=>c.chunk_id===chunkId)||chunks[0];const detail=$('detail');detail.replaceChildren();
+ detail.append(node('h2',doc.path),external('GitHub 원본 ↗',doc.source_url),node('p',`${doc.size_bytes} bytes · ${doc.line_count} lines · ${chunks.length} chunks`,'metadata'));
+ detail.append(node('p','document_id: '+doc.document_id,'metadata'),node('h3','원문 · 선택한 청크 구간 강조'));
+ const source=node('pre',undefined,'source');
+ if(selected){const chars=Array.from(doc.text);source.append(document.createTextNode(chars.slice(0,selected.start_offset).join('')),node('mark',chars.slice(selected.start_offset,selected.end_offset).join('')),document.createTextNode(chars.slice(selected.end_offset).join('')));}else source.textContent=doc.text||'(빈 파일)';detail.append(source);
+ detail.append(node('h3','청크 목록'));const layout=node('div',undefined,'chunk-layout'),nav=node('div',undefined,'chunk-list'),body=node('div');layout.append(nav,body);detail.append(layout);
+ for(const chunk of chunks){const a=node('a',`#${chunk.chunk_index} · L${chunk.start_line}–${chunk.end_line}`,selected===chunk?'active':'');a.href=hash(active.manifest.run_id,docId,chunk.chunk_id);a.append(node('div',`${chunk.token_count} tokens`,'metadata'),badge(chunk.embedding_status));nav.append(a);}
+ if(selected){body.append(badge(selected.embedding_status),node('p',`vector_row: ${selected.vector_row??'없음'} · ${active.manifest.embedding.dimension} dimensions`,'metadata'),node('p',`문자 구간 [${selected.start_offset}, ${selected.end_offset}) · prefix 포함 ${selected.token_count} tokens`,'metadata'),node('p','chunk_id: '+selected.chunk_id,'metadata'),node('pre',selected.text,'source'));if(selected.embedding_error)body.append(node('p',selected.embedding_error,'error'));}else body.append(node('p',doc.text?'청킹이 완료되지 않았습니다.':'빈 파일에는 청크가 없습니다.','muted'));
+ detail.append(jsonDetails('원문 metadata',{...doc,text:'(위 원문 참조)'}));
+}
+function renderRun(id) {
+ active=DATA.runs.find(r=>r.manifest.run_id===id)||null;
+ $('stats').replaceChildren();$('folder-list').replaceChildren();
+ if(active){for(const [label,key] of [['발견 파일','listed_files'],['수집','collected_files'],['제외','excluded_files'],['실패','failed_files'],['청크','chunks'],['벡터','vectors']]){const card=node('div',undefined,'stat');card.append(node('small',label),node('strong',String(active.manifest.counts[key])));$('stats').append(card);}const folders=active.manifest.directories;for(const folder of folders)$('folder-list').append(node('div',folder||'/','directory'));}
+ renderList();overview();
+}
+function fillRuns(repo,id) {
+ $('run').replaceChildren();for(const r of DATA.runs.filter(r=>r.manifest.repo===repo)){const option=node('option',`${r.manifest.started_at} · ${r.manifest.status} · ${(r.manifest.commit_sha||'').slice(0,8)}`);option.value=r.manifest.run_id;$('run').append(option);}
+ if(id&&[...$('run').options].some(o=>o.value===id))$('run').value=id;renderRun($('run').value);
+}
+function route() {
+ const p=new URLSearchParams(location.hash.slice(1));const r=DATA.runs.find(r=>r.manifest.run_id===p.get('run'));
+ if(r){$('repo').value=r.manifest.repo;fillRuns(r.manifest.repo,r.manifest.run_id);if(p.get('document'))renderDocument(p.get('document'),p.get('chunk'));}else fillRuns($('repo').value);
+}
+for(const repo of repos){const option=node('option',repo);option.value=repo;$('repo').append(option);}
+$('warnings').textContent=DATA.warnings.join('\n');$('filter').addEventListener('input',renderList);
+$('repo').addEventListener('change',()=>{fillRuns($('repo').value);if(active)location.hash=hash(active.manifest.run_id);});
+$('run').addEventListener('change',()=>{location.hash=hash($('run').value);});window.addEventListener('hashchange',route);route();
+</script>
+</body>
+</html>
