@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/tests/retrieval-generation/plan.md",
+                "file": "docs/project/workflows.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "plan"
+              "title": "workflows"
             }
           }
         ]
@@ -190,26 +190,42 @@
   },
   "active": "26f80cf65a345b80",
   "lastOpenFiles": [
-    "tests/repo_ingestion/README.md",
+    "docs/project/validation.md",
+    "frontend/dist/assets/index-CscODuY3.js",
+    "backend/__pycache__/run.cpython-312.pyc",
+    "data/logs/requests.jsonl",
+    "data/logs",
+    "frontend/dist/assets/index-_knPD4c4.js",
+    "data/checks/model-result.json",
+    "data/checks/model-requests.jsonl",
+    "backend/app/services/__pycache__/ingestion.cpython-312.pyc.2758051198416",
+    "docs/project/usage.md",
+    "README.md",
+    "data/checks/requests.jsonl",
+    "data/checks",
+    "frontend/node_modules/typescript/SECURITY.md",
+    "frontend/node_modules/typescript/README.md",
+    "frontend/node_modules/react-dom/README.md",
+    "frontend/node_modules/vite/README.md",
+    "frontend/node_modules/postcss/README.md",
+    "frontend/node_modules/picomatch/README.md",
+    "docs/project/database-setup.md",
+    "docs/project/index.md",
+    "docs/project/database.md",
+    "docs/project/architecture.md",
+    "docs/project/artifacts-models.md",
+    "docs/project/workflows.md",
+    "docs/project/api.md",
     "docs/tests/retrieval-generation/plan.md",
-    "docs/tests/retrieval-generation",
+    "docs/tests/retrieval-generation/validation.md",
+    "docs/tests/retrieval-generation/review.md",
+    "tests/retrieval_generation/README.md",
+    "tests/repo_ingestion/README.md",
     "docs/tests/repo-ingestion/final-design.md",
     "docs/tests/repo-ingestion/plan.md",
     "docs/git-rag-design.md",
     "docs/tests/repo-ingestion/usage.md",
     "docs/tests/repo-ingestion/review.md",
-    "tests/repo_ingestion/output/hurwan0629--runstop/20261010T090457Z_61f717f7b73b4ad48ff2b33bfd607d6a/vectors.npy",
-    "tests/repo_ingestion/output/hurwan0629--runstop/20261010T090457Z_61f717f7b73b4ad48ff2b33bfd607d6a/raw/b77635e94c75912da76b51c584fc9b97c4ed5901a15b87df8154b4d8a6024334.txt",
-    "tests/repo_ingestion/output/hurwan0629--runstop/20261010T090457Z_61f717f7b73b4ad48ff2b33bfd607d6a/raw/70dc1422e09ad16d2e45d53e08652df9090b0dadc24c5a1b1637df1ad4264c12.txt",
-    "tests/repo_ingestion/output/hurwan0629--runstop/20261010T090457Z_61f717f7b73b4ad48ff2b33bfd607d6a/raw/1659c16bb9aab4a6e46f64354c50fa11b1bbfd50d9afef2ffd99afdcade2e21e.txt",
-    "tests/repo_ingestion/output/hurwan0629--runstop/20261010T090457Z_61f717f7b73b4ad48ff2b33bfd607d6a/raw/83d219336439cbc213d94402a57b84f0a8294956fe747a3a5003d3f83042591d.txt",
-    "tests/repo_ingestion/output/hurwan0629--runstop/20261010T090457Z_61f717f7b73b4ad48ff2b33bfd607d6a/raw/3147c654af69b0f5da67bf7f8618b418d77d446e31d0b186484db8162e4d50fa.txt",
-    "tests/repo_ingestion/output/hurwan0629--runstop/20261010T090457Z_61f717f7b73b4ad48ff2b33bfd607d6a/raw/8b313ddc248ed88e32d83b7efd3b8019a4e6d8cd5bfe73fbf73d880f633b6692.txt",
-    "tests/repo_ingestion/output/hurwan0629--runstop/20261010T090457Z_61f717f7b73b4ad48ff2b33bfd607d6a/raw/4ae96423dc6d90da5fc7787cf9e89f8b1c1a0f452aa0582cfdd97dba87a6898f.txt",
-    "tests/repo_ingestion/output/hurwan0629--runstop/20261010T090457Z_61f717f7b73b4ad48ff2b33bfd607d6a/raw/517689c45bf0043ac9edd07c1478d0f2d31b596a084696597a5ac8b4c1e2b2ca.txt",
-    "docs/tests/repo-ingestion/validation.md",
-    "tests/git_fetch/README.md",
-    "docs/tests/index.md",
     "docs/git-rag-design.png"
   ]
 }

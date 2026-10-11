@@ -1,0 +1,44 @@
+[
+  {
+    "case_id": "ai-workflow",
+    "repos": ["hurwan0629/runstop"],
+    "question": "RunStop AI에서 데이터 생성, 모델 학습·검증, 저장 모델 테스트는 어떤 순서와 명령어로 실행하나요?",
+    "expected_paths": ["ai/README.md"],
+    "expects_no_evidence": false
+  },
+  {
+    "case_id": "temporal-split",
+    "repos": ["hurwan0629/runstop"],
+    "question": "AI의 user_temporal_holdout 분할에서 Known 사용자의 마지막 요청과 직전 요청은 각각 Warm Test와 Val로 어떻게 배정되나요?",
+    "expected_paths": ["ai/README.md", "ai/src/dataset/splits.py"],
+    "expects_no_evidence": false
+  },
+  {
+    "case_id": "model-registry",
+    "repos": ["hurwan0629/runstop"],
+    "question": "AI 모델 이름을 구현체 클래스에 연결하고 설정에 따라 모델을 생성하는 registry는 어디인가요? 지원하는 모델 목록도 알려주세요.",
+    "expected_paths": ["ai/src/models/registry.py"],
+    "expects_no_evidence": false
+  },
+  {
+    "case_id": "candidate-ranking",
+    "repos": ["hurwan0629/runstop"],
+    "question": "경로 후보들을 학습 artifact의 AI 점수로 내림차순 정렬하고 top_k개를 선택하는 함수는 어디에서 동작하나요?",
+    "expected_paths": ["routing-worker/src/algo/ai/candidate_selector.py"],
+    "expects_no_evidence": false
+  },
+  {
+    "case_id": "graph-elevation",
+    "repos": ["hurwan0629/runstop"],
+    "question": "도로 그래프의 노드 고도를 DEM에서 가져와 각 edge의 경사 속성을 준비하는 코드는 어디인가요?",
+    "expected_paths": ["routing-worker/src/algo/features/elevation.py"],
+    "expects_no_evidence": false
+  },
+  {
+    "case_id": "unsupported-revenue",
+    "repos": ["hurwan0629/runstop"],
+    "question": "테스트용 합성 데이터가 아닌, RunStop 실제 운영 서비스의 2027년 1월 유료 구독 매출은 정확히 얼마인가요?",
+    "expected_paths": [],
+    "expects_no_evidence": true
+  }
+]
