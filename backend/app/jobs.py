@@ -30,7 +30,9 @@ class Jobs:
             error=dict(code='PROCESS_INTERRUPTED',message='프로세스 종료로 중단되었습니다. 새 수집을 시작하세요.')
             conn.execute(update(jobs).where(jobs.c.status=='running').values(status='interrupted',phase='finished',finished_at=now(),error=error))
             if interrupted:
-                conn.execute(update(runs).where(runs.c.run_id.in_(interrupted)).values(status='failed',finished_at=now(),errors=[dict(stage='startup',path=None,**error)]))
+                conn.execute(update(runs).where(
+                    runs.c.run_id.in_(interrupted)
+                ).values(status='failed',finished_at=now(),errors=[dict(stage='startup',path=None,**error)]))
         self.thread=threading.Thread(target=self.loop,name='ingestion-worker',daemon=False)
         self.thread.start()
 
@@ -52,11 +54,22 @@ class Jobs:
                 if not conn.execute(select(repos.c.repo_id).where(repos.c.repo_id==repo_id)).first():
                     raise APIError(404,'NOT_FOUND','repo를 찾을 수 없습니다.')
                 ensure_profile(self.db,conn)
-                conn.execute(runs.insert().values(run_id=run_id,repo_id=repo_id,profile_id=PROFILE_ID,schema_version='2.0',
-                    mode='embed',status='pending',ref_requested=request.ref,scope_path=request.scope_path,
-                    auth_used=bool(self.settings.github_token),filter_settings=filters,chunking_settings=CHUNKING,
-                    counts={},timings_sec={},execution_settings=dict(batch_size=8,requested_device=self.settings.device,
-                        device=self.encoder.device,encoder_loaded=True),errors=[],libraries={}))
+
+                conn.execute(runs.insert()
+                  .values(run_id=run_id,repo_id=repo_id,profile_id=PROFILE_ID,schema_version='2.0',
+                      mode='embed',status='pending',
+                      ref_requested=request.ref,
+                      scope_path=request.scope_path,
+                      auth_used=bool(self.settings.github_token),
+                      filter_settings=filters,chunking_settings=CHUNKING,
+                      counts={},timings_sec={},
+                      execution_settings=dict(
+                          batch_size=8,requested_device=self.settings.device,
+                          device=self.encoder.device,encoder_loaded=True
+                      ),
+                      errors=[],libraries={}
+                ))
+                
                 conn.execute(jobs.insert().values(job_id=job_id,run_id=run_id,repo_id=repo_id,kind='ingestion',status='queued',phase='queued'))
         except IntegrityError:
             raise APIError(409,'INGESTION_ALREADY_ACTIVE','이 저장소의 수집이 이미 대기 또는 실행 중입니다.') from None
@@ -68,7 +81,8 @@ class Jobs:
             raise InterruptedError('Service shutdown requested')
         with self.db.engine.begin() as conn:
             jobs=self.db.tables['jobs']
-            conn.execute(update(jobs).where(jobs.c.job_id==job_id).values(phase=phase,progress_unit=unit,completed_units=current,total_units=total))
+            conn.execute(update(jobs).where(jobs.c.job_id==job_id)
+              .values(phase=phase,progress_unit=unit,completed_units=current,total_units=total))
 
     def loop(self):
         from .services.ingestion import execute
@@ -82,6 +96,7 @@ class Jobs:
             if not job:
                 self.wakeup.wait(1); self.wakeup.clear(); continue
             try:
+                # 실제로 job의 작업
                 execute(self,dict(job))
             except Exception as error:
                 from .config import redact

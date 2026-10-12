@@ -246,7 +246,7 @@ Qwen은 임베딩 profile에 포함하지 않습니다. 생성 모델과 prompt 
 | `created_at` | timestamptz | 대기열 등록 시간 |
 | `started_at`, `finished_at` | timestamptz? | 실행 시작·종료 시간 |
 
-job은 실행 상태이고 run은 데이터 결과입니다. 예를 들어 파일 일부 수집 실패 시 job은 `failed`, run은 결과를 보존한 `partial`일 수 있습니다. %는 저장하지 않고 개수로 계산합니다.
+job은 실행 상태이고 run은 데이터 결과입니다. 예를 들어 파일 일부 수집 실패 시 job은 `failed`, run은 결과를 보존한 `partial`일 수 있습니다. 검증된 호환 벡터가 있으면 이 `partial`도 활성화하여 검색합니다. %는 저장하지 않고 개수로 계산합니다.
 
 ## DB 제약조건
 
@@ -297,11 +297,11 @@ CREATE UNIQUE INDEX uq_repo_active_job ON jobs (repo_id)
 | ID·원문 hash·blob SHA의 대응이 올바름 | import·저장 전 |
 | collected file에는 document가 하나, excluded/failed에는 없음 | run 완료 전 |
 | `chunk.text == document.text[start:end]`, offset이 본문 내에 있고 줄 번호도 일치 | 청킹 직후·run 완료 전 |
-| 비어 있지 않은 문서를 chunk_index 순서대로 겹침·누락 없이 끝까지 덮음 | run 완료 전 |
+| 생성된 청크는 chunk_index 순서대로 겹침·누락 없이 문서 전체를 덮음. partial의 청킹 실패 문서는 청크 없이 원문만 보존 가능 | run 완료 전 |
 | embedded chunk에는 vector가 하나, 미생성 상태에는 없음 | run 완료 전 |
 | 모든 벡터가 유한값, L2 norm 오차≤1e-4, profile의 설정 hash 일치 | 저장 전·import 시 |
 | counts가 실제 행 수와 일치, collect_only에는 vector 없음 | run 완료 전 |
-| active run은 completed, embed, vector>0이며 서버 profile과 일치 | 활성화 트랜잭션 내 |
+| active run은 completed 또는 partial, embed, vector>0이며 서버 profile과 일치 | 활성화 트랜잭션 내 |
 
 active_run_id의 복합 FK는 소속만 보장합니다. 완료 상태나 모델 호환성까지 보장하지 않으므로 repo 행을 잠그고 검증·상태 업데이트·active 교체를 같은 트랜잭션에서 수행합니다.
 

@@ -163,7 +163,7 @@ interface RepoListData {
 }
 ```
 
-초기에는 전체 repo 목록을 반환하며 목록이 커지면 pagination을 추가합니다. 프론트는 searchable=false를 체크 불가로 표시합니다. active_run_id는 최신 GitHub commit을 뜻하지 않습니다.
+초기에는 전체 repo 목록을 반환하며 목록이 커지면 pagination을 추가합니다. 프론트는 searchable=false를 체크 불가로 표시합니다. active_run_id는 최신 GitHub commit을 뜻하지 않습니다. 검증된 completed / partial 활성 run에 호환 벡터가 1개 이상이면 searchable=true이며, partial의 오류 기록은 유지합니다.
 
 ## 수집 시작
 

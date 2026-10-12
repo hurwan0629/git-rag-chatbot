@@ -1,0 +1,9 @@
+# 현재 지정 venv에서 검증한 버전. CUDA용 torch는 PC에 맞는 공식 배포로 준비합니다.
+torch==2.14.0
+transformers==5.17.0
+huggingface-hub==1.32.0
+numpy==2.4.6
+requests==2.34.2
+pyarrow==25.0.1
+pandas==3.0.3
+matplotlib==3.10.9

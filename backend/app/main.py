@@ -83,7 +83,11 @@ def create_app(*,runtime=None,settings=None):
             app.state.generator=None if cfg.search_only else Generator(cfg)
             app.state.inference_lock=threading.Lock()
             app.state.request_logger=RequestLogger(cfg.request_log)
-            jobs=Jobs(db,cfg,encoder,app.state.inference_lock);app.state.jobs=jobs;jobs.start()
+
+            jobs=Jobs(db,cfg,encoder,app.state.inference_lock)
+            app.state.jobs=jobs
+            jobs.start()
+            
             print(f'Service ready on {encoder.device}',flush=True)
             yield
         finally:

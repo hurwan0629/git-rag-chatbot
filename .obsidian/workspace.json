@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "docs/project/workflows.md",
+                "file": "docs/experiments/E001 - E5 코드 검색 모델 Fine-tuning 계획서.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "workflows"
+              "title": "E001 - E5 코드 검색 모델 Fine-tuning 계획서"
             }
           }
         ]
@@ -188,44 +188,45 @@
       "bases:Create new base": false
     }
   },
-  "active": "26f80cf65a345b80",
+  "active": "fb2bdd008e031c73",
   "lastOpenFiles": [
+    "data/experiments/e001/runs/e001_002_tuned/rankings.jsonl",
+    "data/experiments/e001/runs/e001_002_tuned/metrics.json",
+    "data/experiments/e001/runs/e001_002_tuned/manifest.json",
+    "data/experiments/e001/runs/e001_002_tuned/config.json",
+    "data/experiments/e001/runs/e001_002_tuned",
+    "data/experiments/e001/runs/e001_002_train/checkpoints/step_002500/training_state.pt",
+    "data/experiments/e001/runs/e001_002_train/checkpoints/step_002500/e001_model.json",
+    "data/experiments/e001/runs/e001_002_train/checkpoints/step_002500/tokenizer.json",
+    "data/experiments/e001/runs/e001_002_train/checkpoints/step_002500/tokenizer_config.json",
+    "data/experiments/e001/runs/e001_002_train/checkpoints/step_002500/model.safetensors",
+    "data/experiments/e001/runs/e001_002_train/checkpoints/step_002500/config.json",
+    "experiments/e001_e5/validation.md",
+    "data/experiments/e001-smoke/20261011T063051Z/analysis-check.png",
+    "experiments/e001_e5/README.md",
+    "experiments/README.md",
+    "docs/project/database.md",
+    "docs/experiments/E001 - E5 코드 검색 모델 Fine-tuning 계획서.md",
+    "docs/project/artifacts-models.md",
+    "docs/project/database-setup.md",
     "docs/project/validation.md",
-    "frontend/dist/assets/index-CscODuY3.js",
-    "backend/__pycache__/run.cpython-312.pyc",
-    "data/logs/requests.jsonl",
-    "data/logs",
-    "frontend/dist/assets/index-_knPD4c4.js",
-    "data/checks/model-result.json",
-    "data/checks/model-requests.jsonl",
-    "backend/app/services/__pycache__/ingestion.cpython-312.pyc.2758051198416",
+    "docs/project/workflows.md",
+    "docs/project/architecture.md",
     "docs/project/usage.md",
+    "docs/project/index.md",
     "README.md",
-    "data/checks/requests.jsonl",
-    "data/checks",
     "frontend/node_modules/typescript/SECURITY.md",
     "frontend/node_modules/typescript/README.md",
     "frontend/node_modules/react-dom/README.md",
     "frontend/node_modules/vite/README.md",
     "frontend/node_modules/postcss/README.md",
     "frontend/node_modules/picomatch/README.md",
-    "docs/project/database-setup.md",
-    "docs/project/index.md",
-    "docs/project/database.md",
-    "docs/project/architecture.md",
-    "docs/project/artifacts-models.md",
-    "docs/project/workflows.md",
     "docs/project/api.md",
     "docs/tests/retrieval-generation/plan.md",
     "docs/tests/retrieval-generation/validation.md",
     "docs/tests/retrieval-generation/review.md",
     "tests/retrieval_generation/README.md",
     "tests/repo_ingestion/README.md",
-    "docs/tests/repo-ingestion/final-design.md",
-    "docs/tests/repo-ingestion/plan.md",
-    "docs/git-rag-design.md",
-    "docs/tests/repo-ingestion/usage.md",
-    "docs/tests/repo-ingestion/review.md",
     "docs/git-rag-design.png"
   ]
 }

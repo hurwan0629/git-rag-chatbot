@@ -50,7 +50,7 @@ Pop-Location
 
 현재 PC는 기존 테스트의 E5/Qwen 캐시를 읽을 수 있어서 다운로드 없이 시작할 수 있습니다. 새 다운로드는 지정한 공용 캐시에 저장합니다. 시작 시에는 로컬 파일만 읽고 HTTP 요청 처리 중 다운로드하지 않습니다.
 
-기존 output을 DB로 옮기려면 다음을 실행합니다. 모든 run을 검사하며 완료 run만 검색 대상으로 활성화합니다. 실패 run도 기록은 보존합니다.
+기존 output을 DB로 옮기려면 다음을 실행합니다. 검증된 `completed` 또는 `partial` run 중 호환 벡터가 있는 최신 결과를 검색 대상으로 활성화합니다. 실패 기록과 이전 run은 보존합니다.
 
 ```powershell
 & $ragPython backend/manage.py import-output
@@ -81,7 +81,7 @@ frontend: frontend/dist를 FastAPI가 제공
 ## 관리 명령 help
 
 ```text
-usage: python backend/manage.py [-h] {migrate,import-output,download-models} ...
+usage: python backend/manage.py [-h] {migrate,import-output,activate-run,download-models} ...
 
 migrate
   Alembic upgrade head. 다시 실행해도 이미 적용된 migration은 반복하지 않음
@@ -93,6 +93,12 @@ import-output [OUTPUT]
   동일 run_id + 다른 내용: 충돌 오류
   실패한 run의 삽입은 rollback. 원본 파일 유지
 
+activate-run RUN_ID
+  이미 저장된 completed / partial run의 원문·청크·벡터와 실제 token 수 검증
+  호환 모델 + 벡터 1개 이상인 경우 repositories.active_run_id 변경
+  run 상태와 오류 기록은 유지. 실패하면 활성 연결 변경 rollback
+  선택한 run을 활성화하므로 최신 run이 아니어도 지정 가능
+
 download-models [--encoder-only]
   고정 E5 / Qwen revision을 MODEL_CACHE_DIR에 다운로드
   --encoder-only: 검색 전용 PC에서 E5만 준비
@@ -101,13 +107,14 @@ download-models [--encoder-only]
 ```powershell
 & $ragPython backend/manage.py import-output 'C:\example\output'
 & $ragPython backend/manage.py download-models --encoder-only
+& $ragPython backend/manage.py activate-run '20261011T043536Z_bbf7919d70854185996253575785bb4e'
 ```
 
 ## 화면 사용
 
 1. **등록 + 수집 시작**: GitHub URL을 입력합니다. ref와 폴더 범위는 선택 사항입니다. 저장소 등록과 job 생성 API를 차례로 호출합니다.
 2. **수집 진행도**: 단계와 개수·%를 확인합니다. 총량이 없는 단계는 진행률을 계산하지 않습니다.
-3. **검색할 저장소**: 호환되는 활성 벡터가 있는 저장소만 체크할 수 있습니다. 새 수집 실패 시 이전 활성 run은 유지합니다.
+3. **검색할 저장소**: 검증된 `completed` / `partial` 중 호환되는 활성 벡터가 있는 저장소만 체크할 수 있습니다. `partial`은 일부 성공·검색 가능으로 표시하며 벡터가 없는 청크는 검색에서 제외합니다. 새 수집 결과가 검색 불가하면 이전 활성 run을 유지합니다.
 4. **질문**: 검색은 E5 + pgvector, 답변 생성은 검색 후 Qwen을 사용합니다. 본문 500 token 제한은 서버 tokenizer로 확인합니다.
 5. **근거 / 파일 목록**: 파일 링크를 누르면 전체 원문과 선택한 청크가 표시됩니다. emoji도 Python 문자 offset에 맞춰 표시합니다.
 6. **실행 결과 선택**: 이전 run도 조회할 수 있습니다. 제외 사유, 청크/벡터 개수, manifest의 모델 revision·필터·오류를 확인합니다.
@@ -129,6 +136,7 @@ npm run dev
 & $ragPython -m unittest discover -s backend/tests -p 'test_*.py' -v
 & $ragPython backend/tests/check_service.py
 & $ragPython backend/tests/check_service.py --models
+& $ragPython backend/tests/check_saved_search.py https://github.com/openai/openai-python
 ```
 
 ```text
@@ -139,6 +147,9 @@ check_service.py: 실제 PostgreSQL에 migration/import/API/job/제약조건 검
 임시 프로젝트와 volume만 정리하며 실제 서비스 DB는 건드리지 않음
 모델 검증 결과: data/checks/model-result.json
 서비스 요청 로그: data/logs/requests.jsonl
+check_saved_search.py REPO_URL [--base-url URL]: 실행 중인 서버와 기존 OpenAI 저장소의 실제 검색·원문 역참조 확인
+  테스트 질문은 OpenAI Python SDK용이며 재수집하거나 데이터를 삭제하지 않음
+  결과: data/checks/saved-search-result.json
 ```
 
 요청 로그에는 질문·생성 messages·결과가 로컬에 저장됩니다. `data/`는 Git에서 제외하며 비밀 환경변수 값은 제거합니다.

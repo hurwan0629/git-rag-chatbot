@@ -6,14 +6,18 @@ import numpy as np
 from sqlalchemy import select, update
 from .storage import validate_records, stable_id
 from .config import validate_path, CHUNKING
-from .repositories import ensure_profile, now
+from .repositories import ensure_profile, now, searchable_run
 from ..ml.encoder import PROFILE_ID, PROFILE, REVISION
 
 
 def counts_for(files, documents, chunks, vectors):
-    return dict(listed_files=len(files),collected_files=sum(r['status']=='collected' for r in files),
-        excluded_files=sum(r['status']=='excluded' for r in files),failed_files=sum(r['status']=='failed' for r in files),
-        documents=len(documents),chunks=len(chunks),vectors=0 if vectors is None else len(vectors))
+    return dict(
+        listed_files=len(files),
+        collected_files=sum(r['status']=='collected' for r in files),
+        excluded_files=sum(r['status']=='excluded' for r in files),
+        failed_files=sum(r['status']=='failed' for r in files),
+        documents=len(documents),
+        chunks=len(chunks),vectors=0 if vectors is None else len(vectors))
 
 
 def verify(files, documents, chunks, vectors, original, tokenizer=None):
@@ -21,7 +25,7 @@ def verify(files, documents, chunks, vectors, original, tokenizer=None):
         raise ValueError('Unsupported embedding profile')
     if original['chunking'] != CHUNKING:
         raise ValueError('Unsupported chunking settings')
-    if original['status'] in ('completed','collected_only'):
+    if original['status'] in ('completed','collected_only','partial'):
         for key,expected in dict(prefix='passage: ',pooling='masked_mean',normalize=True,dimension=384,dtype='float32').items():
             if original['embedding'].get(key)!=expected:
                 raise ValueError('Embedding configuration mismatch: '+key)
@@ -46,6 +50,50 @@ def bulk(conn, table, records, run_id):
         rows = [{k:v for k,v in row.items() if k in columns} | dict(run_id=run_id)
                 for row in records[start:start+200]]
         conn.execute(table.insert(),rows)
+
+
+def verify_stored(db, conn, original, tokenizer=None):
+    run_id=original['run_id']
+    stored={}
+    for name in ('files','documents','chunks','embeddings'):
+        table=db.tables[name]
+        stored[name]=[dict(r) for r in conn.execute(select(table).where(table.c.run_id==run_id)).mappings()]
+    docs={r['document_id']:r for r in stored['documents']}
+    chunks_by_doc={key:[] for key in docs}
+    vector_map={r['chunk_id']:r['embedding'] for r in stored['embeddings']}
+    if len(vector_map)!=sum(c['embedding_status']=='embedded' for c in stored['chunks']):
+        raise ValueError('Stored embeddings differ from embedded chunks')
+    vectors=[]
+    for c in stored['chunks']:
+        chunks_by_doc[c['document_id']].append(c)
+        c['vector_row']=None
+        if c['chunk_id'] in vector_map:
+            c['vector_row']=len(vectors);vectors.append(vector_map[c['chunk_id']])
+    for d in docs.values():
+        d.update(repo=original['repo'],commit_sha=original['commit_sha'])
+    doc_by_path={d['path']:d for d in docs.values()}
+    for f in stored['files']:
+        d=doc_by_path.get(f['path']);cs=chunks_by_doc[d['document_id']] if d else []
+        f.update(document_id=d['document_id'] if d else None,chunk_count=len(cs),
+                 embedded_chunk_count=sum(c['embedding_status']=='embedded' for c in cs))
+    array=np.asarray(vectors,dtype=np.float32).reshape(-1,384) if original['mode']=='embed' else None
+    verify(stored['files'],list(docs.values()),stored['chunks'],array,original,tokenizer)
+
+
+def activate_run(db, run_id, tokenizer):
+    with db.engine.begin() as conn:
+        runs,repos=(db.tables[n] for n in ('ingestion_runs','repositories'))
+        run=conn.execute(select(runs).where(runs.c.run_id==run_id)).mappings().first()
+        if run is None:raise ValueError('Run not found')
+        repo=conn.execute(select(repos).where(repos.c.repo_id==run['repo_id']).with_for_update()).mappings().one()
+        if not searchable_run(run):raise ValueError('Run has no compatible searchable vectors')
+        ensure_profile(db,conn)
+        original=dict(run,repo=repo['repo'],chunking=run['chunking_settings'],
+                      embedding=dict(PROFILE,prefix=PROFILE['passage_prefix']))
+        verify_stored(db,conn,original,tokenizer)
+        conn.execute(update(repos).where(repos.c.repo_id==repo['repo_id']).values(active_run_id=run_id))
+        return dict(repo=repo['repo'],run_id=run_id,status=run['status'],
+                    previous_active_run_id=repo['active_run_id'],counts=run['counts'])
 
 
 def save(db, repo_id, original, files, documents, chunks, vectors, *, importing=False, job_id=None, source_manifest=None):
@@ -95,31 +143,8 @@ def save(db, repo_id, original, files, documents, chunks, vectors, *, importing=
                       for c in chunks if c['embedding_status']=='embedded']
         bulk(conn,db.tables['embeddings'],embeddings,run_id)
         # Re-read the committed representation before publishing; checks also catch adapter loss.
-        stored = {}
-        for name in ('files','documents','chunks','embeddings'):
-            table = db.tables[name]
-            stored[name] = [dict(r) for r in conn.execute(select(table).where(table.c.run_id==run_id)).mappings()]
-        docs = {r['document_id']:r for r in stored['documents']}
-        chunks_by_doc = {key:[] for key in docs}
-        vector_map = {r['chunk_id']:r['embedding'] for r in stored['embeddings']}
-        for c in stored['chunks']:
-            chunks_by_doc[c['document_id']].append(c)
-        reconstructed_vectors=[]
-        for c in stored['chunks']:
-            c['vector_row']=None
-            if c['chunk_id'] in vector_map:
-                c['vector_row']=len(reconstructed_vectors)
-                reconstructed_vectors.append(vector_map[c['chunk_id']])
-        for d in docs.values():
-            d.update(repo=original['repo'],commit_sha=original['commit_sha'])
-        doc_by_path={d['path']:d for d in docs.values()}
-        for f in stored['files']:
-            d=doc_by_path.get(f['path']); cs=chunks_by_doc[d['document_id']] if d else []
-            f.update(document_id=d['document_id'] if d else None,chunk_count=len(cs),
-                     embedded_chunk_count=sum(c['embedding_status']=='embedded' for c in cs))
-        array=np.asarray(reconstructed_vectors,dtype=np.float32).reshape(-1,384) if vectors is not None else None
-        verify(stored['files'],list(docs.values()),stored['chunks'],array,original)
-        if original['status']=='completed' and original['mode']=='embed' and len(embeddings)>0:
+        verify_stored(db,conn,original)
+        if searchable_run(values):
             old = conn.execute(select(runs.c.created_at).where(runs.c.run_id==repo['active_run_id'])).scalar_one_or_none() if repo['active_run_id'] else None
             new = conn.execute(select(runs.c.created_at).where(runs.c.run_id==run_id)).scalar_one()
             if old is None or new>=old:

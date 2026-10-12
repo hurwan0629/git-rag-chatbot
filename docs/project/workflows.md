@@ -58,7 +58,7 @@ sequenceDiagram
     E-->>J: 정규화된384차원 벡터
     J->>D: chunks와 embeddings 저장
     J->>J: 출처와 데이터 무결성 검증
-    J->>D: 완료 처리와 active run 교체
+    J->>D: 최종 상태 저장, 검증된 completed/partial 활성화
     F->>A: GET job 상태를 주기적으로 조회
     A-->>F: 단계와 처리 개수
 ```
@@ -67,7 +67,7 @@ sequenceDiagram
 
 청킹은 `passage: `와 special token을 포함해 512 token 이하, 줄 경계 우선, 긴 한 줄은 문자 구간 분할, overlap 0입니다. 문서마다 청크 수가 달라집니다. 빈 문서는 document만 만들고 chunk는 만들지 않습니다.
 
-중간 결과는 배치별로 저장하지만 검색에서 제외합니다. 마지막 검증이 끝난 뒤 짧은 트랜잭션에서 완료 상태와 active run을 교체합니다. 일부 실패한 run은 partial로 보존하며 기존 active run은 유지합니다. 새 run이 정상 완료됐어도 벡터가 0개면 active run은 유지하고 UI에 이유를 표시합니다.
+중간 결과는 배치별로 저장하지만 검색에서 제외합니다. 마지막 검증이 끝난 뒤 짧은 트랜잭션에서 최종 상태와 active run을 교체합니다. 일부 실패한 run은 partial로 보존하며, 검증된 호환 벡터가 1개 이상이면 completed와 동일하게 최신 결과를 활성화합니다. 실패·벡터 0개·검증 오류인 결과는 기존 active run을 유지합니다. 검색은 embeddings에 저장된 성공 청크만 사용하며 이전 run은 삭제하지 않습니다.
 
 ## 검색과 답변 순서
 

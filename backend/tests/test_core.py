@@ -15,9 +15,20 @@ from app.ml.encoder import select_device
 from app.ml.generator import generator_dtype
 from app.ml.prompts import check_citations, build_context
 from app.errors import APIError
+from app.services.repositories import searchable_run
+from app.ml.encoder import PROFILE_ID
 
 
 class CoreTests(unittest.TestCase):
+    def test_partial_search_eligibility(self):
+        run=dict(status='partial',mode='embed',profile_id=PROFILE_ID,commit_sha='1'*40,counts={'vectors':1})
+        self.assertTrue(searchable_run(run))
+        self.assertTrue(searchable_run(run|{'status':'completed'}))
+        for change in ({'status':'failed'},{'status':'running'},{'mode':'collect_only'},
+                       {'profile_id':'0'*64},{'commit_sha':None},{'counts':{'vectors':0}}):
+            self.assertFalse(searchable_run(run|change))
+        self.assertFalse(searchable_run(None))
+
     def test_busy_port_fails_before_model_loading(self):
         import run
         with socket.socket() as listener:

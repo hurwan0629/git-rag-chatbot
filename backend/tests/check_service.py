@@ -58,6 +58,8 @@ def tests(db,settings):
     from app.services.storage import stable_id
     from app.services.repositories import now
     from manage import import_output
+    from app.services.persistence import activate_run
+    from app.services.github_client import APIError as GitHubError
     report=import_output(db,ROOT/'tests/repo_ingestion/output')
     check(not report['failures'],str(report))
     report2=import_output(db,ROOT/'tests/repo_ingestion/output')
@@ -124,9 +126,16 @@ def tests(db,settings):
                 def __init__(self,*args):pass
                 def snapshot(self,ref):
                     if ref=='fail':raise ValueError('expected ingestion failure')
+                    self.ref=ref
                     entered.set();gate.wait(10);return '1'*40,'2'*40
-                def inventory(self,tree):return [dict(type='blob',mode='100644',path='README.md',sha=sha,size=len(data))],True,[]
-                def blob(self,*args):return data
+                def inventory(self,tree):
+                    entries=[dict(type='blob',mode='100644',path='README.md',sha=sha,size=len(data))]
+                    if self.ref=='partial-download':entries.append(dict(type='blob',mode='100644',path='failed.md',sha='f'*40,size=len(data)))
+                    if self.ref=='partial-embedding':entries=[dict(type='blob',mode='100644',path=f'file{i}.md',sha=sha,size=len(data)) for i in range(9)]
+                    return entries,True,[]
+                def blob(self,blob_sha,*args):
+                    if blob_sha=='f'*40:raise GitHubError('network_error','expected file failure')
+                    return data
             def wait_job(jid):
                 for _ in range(200):
                     response=client.get('/api/v1/jobs/'+jid);check(response.status_code==200,response.text)
@@ -145,7 +154,51 @@ def tests(db,settings):
                 check(wait_job(failed['job_id'])['status']=='failed','failed job')
                 active=next(r for r in client.get('/api/v1/repos').json()['data']['items'] if r['repo_id']==registered['repo_id'])
                 check(active['active_run_id']==first['run_id'],'failed run must preserve previous active run')
+                partial=client.post(f"/api/v1/repos/{registered['repo_id']}/ingestions",json={'ref':'partial-download'}).json()['data']
+                check(wait_job(partial['job_id'])['status']=='failed','partial job retains failure history')
+                active=next(r for r in client.get('/api/v1/repos').json()['data']['items'] if r['repo_id']==registered['repo_id'])
+                check(active['active_run_id']==partial['run_id'] and active['searchable'],'partial download activation')
+                check(client.get('/api/v1/runs/'+partial['run_id']).json()['data']['status']=='partial','partial status retained')
+                body=dict(question='hello',repo_ids=[registered['repo_id']],top_k=10)
+                check(client.post('/api/v1/search',json=body).status_code==200,'partial search')
+                check(client.post('/api/v1/answers',json=body).status_code==200,'partial answer')
+                original_encode=encoder.encode
+                calls=[]
+                def fail_first_batch(texts,prefix):
+                    calls.append(1)
+                    if len(calls)==1:raise ValueError('expected batch failure')
+                    return original_encode(texts,prefix)
+                with patch.object(encoder,'encode',side_effect=fail_first_batch):
+                    mixed=client.post(f"/api/v1/repos/{registered['repo_id']}/ingestions",json={'ref':'partial-embedding'}).json()['data']
+                    wait_job(mixed['job_id'])
+                m=client.get('/api/v1/runs/'+mixed['run_id']).json()['data']
+                check(m['status']=='partial' and m['searchable'] and m['counts']['chunks']==9 and m['counts']['vectors']==1,'mixed vectors activate')
+                found=client.post('/api/v1/search',json=body).json()['data']['sources']
+                check(len(found)==1 and found[0]['path']=='file8.md','failed chunks excluded from search')
+                document=client.get(f"/api/v1/documents/{found[0]['run_id']}/{found[0]['document_id']}").json()['data']
+                check(found[0]['text']==document['text'][found[0]['start_offset']:found[0]['end_offset']],'partial reverse lookup')
+                with patch.object(encoder,'encode',side_effect=ValueError('all embeddings fail')):
+                    empty=client.post(f"/api/v1/repos/{registered['repo_id']}/ingestions",json={}).json()['data'];wait_job(empty['job_id'])
+                active=next(r for r in client.get('/api/v1/repos').json()['data']['items'] if r['repo_id']==registered['repo_id'])
+                check(active['active_run_id']==mixed['run_id'],'zero vectors preserve active run')
+                try:activate_run(db,empty['run_id'],encoder.tokenizer)
+                except ValueError:pass
+                else:raise AssertionError('zero vector activation accepted')
+                activate_run(db,first['run_id'],encoder.tokenizer)
+                with db.engine.begin() as conn:
+                    table=db.tables['ingestion_runs']
+                    conn.execute(update(table).where(table.c.run_id==mixed['run_id']).values(counts=m['counts']|{'vectors':2}))
+                try:activate_run(db,mixed['run_id'],encoder.tokenizer)
+                except ValueError:pass
+                else:raise AssertionError('invalid stored counts activated')
+                active=next(r for r in client.get('/api/v1/repos').json()['data']['items'] if r['repo_id']==registered['repo_id'])
+                check(active['active_run_id']==first['run_id'],'failed validation rolls back activation')
+                with db.engine.begin() as conn:
+                    conn.execute(update(table).where(table.c.run_id==mixed['run_id']).values(counts=m['counts']))
+                activate_run(db,mixed['run_id'],encoder.tokenizer)
+                check(client.get('/api/v1/runs/'+mixed['run_id']).json()['data']['searchable'],'stored partial activation')
             print('PASS: background ingestion, progress, duplicate guard, atomic activation, failure preserves old run',flush=True)
+            print('PASS: partial download/embedding search and answers, zero-vector guard, validated stored activation and rollback',flush=True)
     finally:jobs.stop()
     # Recovery handles a crash, and queued work remains resumable.
     with db.engine.begin() as conn:

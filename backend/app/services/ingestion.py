@@ -18,19 +18,28 @@ def execute(runner, job):
         runs,repos=(db.tables[n] for n in ('ingestion_runs','repositories'))
         run=dict(conn.execute(select(runs).where(runs.c.run_id==run_id)).mappings().one())
         repo=conn.execute(select(repos).where(repos.c.repo_id==job['repo_id'])).mappings().one()['repo']
-    original=dict(run_id=run_id,repo=repo,repo_url='https://github.com/'+repo,mode='embed',status='running',
+    # ========================================
+    original=dict(
+        run_id=run_id,
+        repo=repo,repo_url='https://github.com/'+repo,mode='embed',status='running',
         ref_requested=run['ref_requested'],scope_path=run['scope_path'],commit_sha=None,tree_sha=None,
         started_at=run['started_at'].isoformat(),finished_at=None,inventory_complete=False,
-        auth_used=bool(runner.settings.github_token),filter=run['filter_settings'],chunking=run['chunking_settings'],
-        embedding=dict(model_id=MODEL_ID,revision=REVISION,batch_size=8,device=runner.encoder.device,
-                       prefix='passage: ',pooling='masked_mean',normalize=True,dimension=384,dtype='float32',
-                       requested_device=runner.settings.device,encoder_loaded=True),
+        auth_used=bool(runner.settings.github_token),
+        filter=run['filter_settings'],
+        chunking=run['chunking_settings'],
+        embedding=dict(
+            model_id=MODEL_ID,revision=REVISION,batch_size=8,device=runner.encoder.device,
+            prefix='passage: ',pooling='masked_mean',normalize=True,dimension=384,dtype='float32',
+            requested_device=runner.settings.device,encoder_loaded=True
+        ),
         counts={},timings_sec={},errors=[],libraries={'python':sys.version.split()[0]})
+    # ========================================
     for name in ('torch','transformers','numpy','sqlalchemy','pgvector'):
         original['libraries'][name]=importlib.metadata.version(name)
     files=[]; documents=[]; chunks=[]; vectors=[]
     stage='listing'; started=time.perf_counter(); stage_started=started
     try:
+        # 수집 대상 존재 확인
         client=GitHubClient(repo,runner.settings.github_token)
         commit,tree=client.snapshot(run['ref_requested'])
         original.update(commit_sha=commit,tree_sha=tree)
@@ -39,6 +48,8 @@ def execute(runner, job):
         original['errors'].extend(errors)
         if run['scope_path'] and complete and not any(e['path']==run['scope_path'] and e['type']=='tree' for e in entries):
             raise ValueError('scope_path에 해당하는 폴더가 없습니다.')
+
+        # 수집 시작
         original['timings_sec'][stage]=time.perf_counter()-stage_started
         stage='collecting';stage_started=time.perf_counter()
         total=sum(e['type']!='tree' for e in entries)
@@ -46,6 +57,8 @@ def execute(runner, job):
         files,documents=collect(client,entries,repo,commit,run_id,run['scope_path'],original['filter'],
             progress=lambda current:runner.progress(jid,stage,'files',current,total))
         original['timings_sec'][stage]=time.perf_counter()-stage_started
+
+        # chunking 시작
         stage='chunking';stage_started=time.perf_counter()
         runner.progress(jid,stage,'files',0,len(documents))
         for index,doc in enumerate(documents):
@@ -56,6 +69,8 @@ def execute(runner, job):
                 original['errors'].append(dict(stage=stage,path=doc['path'],code='chunking_failed',message=redact(error)))
             runner.progress(jid,stage,'files',index+1,len(documents))
         original['timings_sec'][stage]=time.perf_counter()-stage_started
+
+        # embedding 시작
         stage='embedding';stage_started=time.perf_counter()
         runner.progress(jid,stage,'chunks',0,len(chunks))
         for start in range(0,len(chunks),8):
@@ -71,15 +86,18 @@ def execute(runner, job):
                 original['errors'].append(dict(stage=stage,path=None,code='embedding_failed',message=redact(error)))
             runner.progress(jid,stage,'chunks',start+len(batch),len(chunks))
         original['timings_sec'][stage]=time.perf_counter()-stage_started
+
     except InterruptedError:
         raise
     except Exception as error:
         original['errors'].append(dict(stage=stage,path=None,code=getattr(error,'code','ingestion_failed'),message=redact(error)))
+    
+    # 작업 종료 및 저장 시작
     array=np.asarray(vectors,dtype=np.float32).reshape(-1,384)
     grouped={doc['document_id']:[] for doc in documents}
     for c in chunks:
         grouped[c['document_id']].append(c)
-    for row in files:
+    for row in files: 
         cs=grouped.get(row['document_id'],[])
         row.update(chunk_count=len(cs),embedded_chunk_count=sum(c['embedding_status']=='embedded' for c in cs))
     original['counts']=counts_for(files,documents,chunks,array)

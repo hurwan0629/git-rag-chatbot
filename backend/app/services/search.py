@@ -3,6 +3,7 @@ from urllib.parse import quote
 from sqlalchemy import text
 from ..errors import APIError
 from ..ml.encoder import PROFILE_ID
+from .repositories import searchable_run
 
 
 def source_url(repo,commit,path):
@@ -18,7 +19,7 @@ def search(db, encoder, request):
             WHERE r.repo_id=ANY(:ids) ORDER BY r.repo_id'''),dict(ids=request.repo_ids)).mappings())
     if len(rows)!=len(request.repo_ids):
         raise APIError(404,'NOT_FOUND','선택한 repo를 찾을 수 없습니다.')
-    if any(r['status']!='completed' or r['mode']!='embed' or r['profile_id']!=PROFILE_ID or r['counts'].get('vectors',0)<=0 for r in rows):
+    if any(not searchable_run(r) for r in rows):
         raise APIError(409,'REPO_NOT_SEARCHABLE','선택한 repo에 호환되는 활성 벡터가 없습니다.')
     tokens=encoder.question_tokens(request.question)
     encoded=time.perf_counter()

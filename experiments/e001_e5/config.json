@@ -1,0 +1,88 @@
+{
+  "experiment_id": "E001",
+  "status": "ready",
+  "seed": 42,
+  "model": {
+    "model_id": "intfloat/multilingual-e5-small",
+    "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+    "query_prefix": "query: ",
+    "passage_prefix": "passage: ",
+    "pooling": "masked_mean",
+    "normalize": true,
+    "dimension": 384,
+    "max_input_tokens": 512
+  },
+  "data": {
+    "dataset": "CodeSearchNet",
+    "source_url": "https://github.com/github/CodeSearchNet",
+    "hub_dataset": "code-search-net/code_search_net",
+    "hub_revision": "bd0cf261e357a3eb5c8fba490d23ec1a1cd59555",
+    "version": "v2",
+    "language": "python",
+    "train_split": "train",
+    "validation_split": "valid",
+    "train_pairs": 20000,
+    "validation_pairs": 1000,
+    "preserve_repository_splits": true,
+    "exclude_evaluation_repositories": true,
+    "deduplicate_pairs": true,
+    "positive_docstring_policy": "remove_query_docstring",
+    "code_overflow_policy": "exclude_pair",
+    "query_overflow_policy": "exclude_pair"
+  },
+  "training": {
+    "device": "auto",
+    "precision": "bf16_if_supported_else_fp32",
+    "loss": "infonce",
+    "negative_mode": "in_batch",
+    "batch_size": 8,
+    "temperature": 0.01,
+    "optimizer": "AdamW",
+    "learning_rate": 0.00002,
+    "epochs": 1,
+    "max_steps": null,
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.1,
+    "max_grad_norm": 1.0,
+    "logging_every_steps": 10,
+    "validation_every_steps": 250,
+    "checkpoint_metric": "validation_mrr_at_10",
+    "checkpoint_metric_mode": "max"
+  },
+  "evaluation": {
+    "dataset": "JetBrains-Research/lca-bug-localization",
+    "revision": "f2bb26a1c3320ccc1d7b02d2630077ff327a80f6",
+    "configuration": "py",
+    "split": "test",
+    "snapshot": "base_sha",
+    "query_fields": ["issue_title", "issue_body"],
+    "query_overflow_policy": "head_tail_tokens",
+    "max_query_body_tokens": 500,
+    "max_file_bytes": 1000000,
+    "candidate_extensions": [".py"],
+    "include_test_files": true,
+    "unit": "file",
+    "chunking": {
+      "method": "line_greedy_char_fallback",
+      "max_input_tokens": 512,
+      "overlap_tokens": 0,
+      "offset_unit": "python_char"
+    },
+    "similarity": "cosine",
+    "file_score": "max_chunk_score",
+    "metrics": {"recall_at_k": [5], "mrr_at_k": [10], "ndcg_at_k": [10]},
+    "primary_metric": "recall_at_5"
+  },
+  "paths": {
+    "raw": "data/experiments/e001/raw",
+    "prepared": "data/experiments/e001/prepared",
+    "runs": "data/experiments/e001/runs"
+  },
+  "notes": [
+    "Hyperparameters are initial settings; measure full-length GPU batch memory with Qwen stopped",
+    "Repository and normalized AST/query duplicates are excluded across train/valid",
+    "Unavailable LCA ground-truth files exclude the whole query and are recorded",
+    "Local source archives and all prepared files are hashed",
+    "Korean/English service queries require a separately labeled evaluation set"
+  ]
+}
